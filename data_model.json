@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "entities": [
+    {
+      "entity_name": "Property",
+      "description": "Represents the physical real estate asset, independent of any specific foreclosure event.",
+      "primary_key": ["property_id"],
+      "attributes": [
+        { "name": "property_id", "type": "UUID", "required": true },
+        { "name": "address_full", "type": "String", "required": true },
+        { "name": "address_street", "type": "String", "required": true },
+        { "name": "address_city", "type": "String", "required": true },
+        { "name": "address_zip", "type": "String", "required": true },
+        { "name": "address_county", "type": "String", "required": true },
+        { "name": "address_state", "type": "String", "default": "NJ" },
+        { "name": "occupancy_status", "type": "Enum(Vacant, Occupied, Unknown)", "source_column": "Occupancy" },
+        { "name": "estimated_market_value", "type": "Decimal", "source_column": "Est. Value" }
+      ],
+      "relationships": [
+        { "target_entity": "ForeclosureEvent", "type": "OneToMany", "description": "A property can have multiple historical foreclosure events" }
+      ]
+    },
+    {
+      "entity_name": "ForeclosureEvent",
+      "description": "Represents a specific legal or sales event attached to a property at a point in time.",
+      "primary_key": ["event_id"],
+      "attributes": [
+        { "name": "event_id", "type": "UUID", "required": true },
+        { "name": "property_id", "type": "UUID", "foreign_key": "Property.property_id" },
+        { "name": "stage", "type": "Enum(Pre-Foreclosure, Sheriff Sale, Auction, REO)", "source_column": "Stage" },
+        { "name": "status_raw", "type": "String", "source_column": "Status" },
+        { "name": "sale_date", "type": "Date", "source_column": "Auction Date" },
+        { "name": "opening_bid", "type": "Decimal", "source_column": "Opening Bid" },
+        { "name": "defendant_name", "type": "String", "source_column": "Home Owner" },
+        { "name": "defendant_phone", "type": "String", "source_column": "Phone Number" },
+        { "name": "notes", "type": "Text", "source_column": "Notes / Flags" }
+      ],
+      "relationships": [
+        { "target_entity": "Property", "type": "ManyToOne" },
+        { "target_entity": "Source", "type": "OneToMany", "description": "An event might be verified by multiple data sources" }
+      ]
+    },
+    {
+      "entity_name": "Source",
+      "description": "Tracks where the data was ingested from for auditability and deduplication.",
+      "primary_key": ["source_id"],
+      "attributes": [
+        { "name": "source_id", "type": "UUID", "required": true },
+        { "name": "event_id", "type": "UUID", "foreign_key": "ForeclosureEvent.event_id" },
+        { "name": "url", "type": "URL", "source_column": "Source URL" },
+        { "name": "ingestion_timestamp", "type": "DateTime" },
+        { "name": "source_type", "type": "Enum(Excel, Manual, Scraper)" }
+      ]
+    },
+    {
+      "entity_name": "SavedSearch",
+      "description": "User-defined filters and alert configurations.",
+      "primary_key": ["search_id"],
+      "attributes": [
+        { "name": "search_id", "type": "UUID", "required": true },
+        { "name": "name", "type": "String", "required": true },
+        { "name": "filters_json", "type": "JSON", "description": "Stores criteria like min_equity, zip_codes, etc." },
+        { "name": "alerts_enabled", "type": "Boolean", "default": false },
+        { "name": "last_run_at", "type": "DateTime" }
+      ]
+    }
+  ]
+}

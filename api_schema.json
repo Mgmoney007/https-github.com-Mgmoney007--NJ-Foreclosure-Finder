@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NJ Foreclosure Finder API Schema",
+  "description": "Canonical schema definitions for the NJ Foreclosure Finder API, unifying Property, ForeclosureEvent, and Valuation entities into consumable resources.",
+  "definitions": {
+    "PropertyListing": {
+      "type": "object",
+      "description": "A denormalized aggregate representing a single property and its active foreclosure status, enriched with valuation and AI analysis.",
+      "required": [
+        "id",
+        "address",
+        "source",
+        "foreclosure",
+        "valuation",
+        "audit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique system identifier for this specific listing record."
+        },
+        "address": {
+          "type": "object",
+          "description": "Physical location details of the asset.",
+          "required": ["full", "street", "city", "state", "zip"],
+          "properties": {
+            "full": { "type": "string", "description": "Full raw address string." },
+            "street": { "type": "string", "description": "Street number and name." },
+            "city": { "type": "string", "description": "City name." },
+            "county": { "type": "string", "description": "County name (e.g., Hudson, Essex)." },
+            "state": { "type": "string", "enum": ["NJ"], "description": "State code, fixed to NJ." },
+            "zip": { "type": "string", "pattern": "^\\d{5}(-\\d{4})?$", "description": "ZIP code." }
+          }
+        },
+        "source": {
+          "type": "object",
+          "description": "Metadata regarding the origin of this data point.",
+          "required": ["source_type"],
+          "properties": {
+            "source_type": { "type": "string", "description": "Category of source (e.g., 'Manual Import', 'Scraper', 'API')." },
+            "source_name": { "type": "string", "description": "Name of the specific source (e.g., 'Excel Tracker')." },
+            "source_url": { "type": "string", "format": "uri", "description": "Direct link to the source listing." }
+          }
+        },
+        "foreclosure": {
+          "type": "object",
+          "description": "Details regarding the legal foreclosure proceeding.",
+          "required": ["stage", "status"],
+          "properties": {
+            "stage": { 
+              "type": "string", 
+              "enum": ["pre_foreclosure", "sheriff_sale", "auction", "reo", "unknown"],
+              "description": "Normalized stage of the foreclosure lifecycle."
+            },
+            "status": { "type": "string", "description": "Raw status text from the source (e.g., 'Adjourned')." },
+            "sale_date": { "type": ["string", "null"], "format": "date", "description": "Scheduled sale or auction date (ISO 8601)." },
+            "opening_bid": { "type": ["number", "null"], "description": "Starting bid amount in USD." },
+            "judgment_amount": { "type": ["number", "null"], "description": "Total judgment amount against the property." },
+            "plaintiff": { "type": ["string", "null"], "description": "The bank or entity forcing the sale." },
+            "defendant": { "type": ["string", "null"], "description": "The homeowner or borrower name." },
+            "owner_phone": { "type": ["string", "null"], "description": "Contact number for the owner (if available)." }
+          }
+        },
+        "valuation": {
+          "type": "object",
+          "description": "Financial assessment and equity calculations.",
+          "required": [],
+          "properties": {
+            "estimated_value": { "type": ["number", "null"], "description": "Estimated market value (ARV) in USD." },
+            "equity_amount": { "type": ["number", "null"], "description": "Calculated spread: Est. Value - Opening Bid." },
+            "equity_pct": { "type": ["number", "null"], "description": "Equity percentage: (Equity Amount / Est. Value) * 100." }
+          }
+        },
+        "ai_analysis": {
+          "type": "object",
+          "description": "Inference results from the AI model.",
+          "required": [],
+          "properties": {
+            "ai_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "0-100 score indicating investment attractiveness." },
+            "risk_band": { "type": ["string", "null"], "enum": ["Low", "Moderate", "High", "Unknown"], "description": "Categorical risk assessment." },
+            "ai_summary": { "type": ["string", "null"], "description": "Concise natural language summary of the opportunity." },
+            "rationale": { "type": ["string", "null"], "description": "Reasoning behind the score and risk band." }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "description": "System metadata for data integrity and deduplication.",
+          "required": ["ingestion_timestamp", "dedupe_key"],
+          "properties": {
+            "ingestion_timestamp": { "type": "string", "format": "date-time", "description": "When this record was created." },
+            "last_updated": { "type": "string", "format": "date-time", "description": "When this record was last modified." },
+            "dedupe_key": { "type": "string", "description": "Deterministic hash or string key for deduplication (e.g., normalized address)." }
+          }
+        },
+        "occupancy": { "type": "string", "description": "Occupancy status (Vacant, Occupied, etc.)." },
+        "notes": { "type": "string", "description": "User or system generated notes." }
+      }
+    },
+    "SavedSearch": {
+      "type": "object",
+      "description": "Configuration for a user's persistent search criteria and alert settings.",
+      "required": ["id", "name", "filters"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid", "description": "Unique identifier for the saved search." },
+        "name": { "type": "string", "description": "User-defined name for this search." },
+        "filters": {
+          "type": "object",
+          "description": "Filter criteria to apply to the property feed.",
+          "properties": {
+            "min_equity_pct": { "type": "number", "description": "Minimum equity percentage required." },
+            "max_price": { "type": "number", "description": "Maximum opening bid or value." },
+            "cities": { "type": "array", "items": { "type": "string" }, "description": "List of target cities." },
+            "stages": { 
+              "type": "array", 
+              "items": { "type": "string", "enum": ["pre_foreclosure", "sheriff_sale", "auction", "reo"] },
+              "description": "List of foreclosure stages to include."
+            }
+          }
+        },
+        "alerts_enabled": { "type": "boolean", "default": false, "description": "If true, new matches trigger notifications." },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp." }
+      }
+    }
+  }
+}
