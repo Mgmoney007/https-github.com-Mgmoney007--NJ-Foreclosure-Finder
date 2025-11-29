@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
-import { PropertyListing, NormalizedStage, RiskBand } from '../types';
+import React, { useState, useEffect } from 'react';
+import { PropertyListing, NormalizedStage, RiskBand, TimelineEvent } from '../types';
 import { 
   X, Search, Filter, AlertTriangle, CheckCircle, Calendar, 
-  DollarSign, ArrowRight, TrendingUp, MapPin, Loader2 
+  DollarSign, ArrowRight, TrendingUp, MapPin, Loader2, Clock 
 } from 'lucide-react';
 import { BAND_COLORS } from '../constants';
 import EquityGauge from './EquityGauge';
@@ -217,6 +217,32 @@ export const DealsTable: React.FC<DealsTableProps> = ({ properties, onSelectProp
 
 export const PropertyDrawer: React.FC<PropertyDrawerProps> = ({ isOpen, onClose, property, onAnalyze }) => {
   const [analyzing, setAnalyzing] = useState(false);
+  const [history, setHistory] = useState<TimelineEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && property) {
+        setHistoryLoading(true);
+        // Reset history initially
+        setHistory([]);
+        
+        fetch(`/api/v1/properties/${property.id}/history`)
+            .then(res => {
+                if (!res.ok) throw new Error("Failed to fetch history");
+                return res.json();
+            })
+            .then(data => {
+                setHistory(data);
+                setHistoryLoading(false);
+            })
+            .catch(err => {
+                console.error("History fetch error:", err);
+                setHistoryLoading(false);
+            });
+    } else {
+        setHistory([]);
+    }
+  }, [isOpen, property]);
 
   const handleAnalyzeClick = async () => {
     if (!property || !onAnalyze) return;
@@ -350,14 +376,73 @@ export const PropertyDrawer: React.FC<PropertyDrawerProps> = ({ isOpen, onClose,
                 </div>
                  <div className="p-3 flex justify-between">
                   <span className="text-sm text-slate-500">Source</span>
-                  <a href={property.source.source_url} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[200px]">
-                    {property.source.source_name}
-                  </a>
+                  {property.source.source_url ? (
+                    <a 
+                      href={property.source.source_url} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[200px]"
+                      title={property.source.source_name}
+                    >
+                      {property.source.source_name}
+                    </a>
+                  ) : (
+                    <span className="text-sm font-medium text-slate-900">
+                      {property.source.source_name || "N/A"}
+                    </span>
+                  )}
                 </div>
              </div>
           </section>
 
-          {/* 4. Notes / Internal */}
+          {/* 4. Timeline History */}
+          <section className="space-y-3">
+             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+               <Clock size={18} className="text-slate-500" />
+               Property Timeline
+             </h3>
+             <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-2">
+                {historyLoading ? (
+                   <div className="pl-6 py-2 text-sm text-slate-400 italic">Loading history...</div>
+                ) : history.length === 0 ? (
+                   <div className="pl-6 py-2 text-sm text-slate-400 italic">No history events found.</div>
+                ) : (
+                  history.map((event) => (
+                    <div key={event.id} className="relative pl-6">
+                      {/* Dot */}
+                      <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-white border-2 border-blue-500 box-content"></div>
+                      
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded self-start">
+                           {new Date(event.date).toLocaleDateString()}
+                        </span>
+                        <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-1 sm:mt-0">
+                          {event.source}
+                        </span>
+                      </div>
+                      
+                      <h4 className="text-sm font-medium text-slate-900 mt-1">
+                        {event.description}
+                      </h4>
+                      
+                      {/* Metadata Dump */}
+                      {event.metadata && Object.keys(event.metadata).length > 0 && (
+                        <div className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                          {Object.entries(event.metadata).map(([k, v]) => (
+                            <div key={k} className="flex gap-2">
+                              <span className="font-medium text-slate-500 capitalize">{k.replace(/_/g, ' ')}:</span>
+                              <span className="truncate max-w-[200px]">{String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+             </div>
+          </section>
+
+          {/* 5. Notes / Internal */}
           <section className="space-y-2">
             <h3 className="font-semibold text-slate-800">Internal Notes</h3>
             <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-sm text-yellow-800">

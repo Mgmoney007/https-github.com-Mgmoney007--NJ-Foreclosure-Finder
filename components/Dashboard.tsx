@@ -1,28 +1,33 @@
-
 import React, { useMemo, useState } from 'react';
 import { PropertyListing, NormalizedStage } from '../types';
 import PropertyCard from './PropertyCard';
 import MapView from './MapView';
 import { SearchForm, DealsTable, PropertyDrawer, SearchFilters } from './CoreComponents';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ArrowUpRight, DollarSign, LayoutGrid, List, Database, Map } from 'lucide-react';
+import { ArrowUpRight, DollarSign, LayoutGrid, List, Database, Map, RefreshCw } from 'lucide-react';
 import { analyzeProperty } from '../services/geminiService';
 
 interface DashboardProps {
   properties: PropertyListing[];
+  viewMode: 'grid' | 'list' | 'map';
+  setViewMode: (mode: 'grid' | 'list' | 'map') => void;
+  filters: SearchFilters;
+  setFilters: (filters: SearchFilters) => void;
+  onRefresh: () => Promise<void>;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ properties: initialProperties }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+  properties: initialProperties,
+  viewMode,
+  setViewMode,
+  filters,
+  setFilters,
+  onRefresh
+}) => {
   // --- State ---
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'map'>('grid');
+  // viewMode and filters lifted to App.tsx
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
-  
-  const [filters, setFilters] = useState<SearchFilters>({
-    q: '',
-    minEquity: 0,
-    stages: [],
-    location: ''
-  });
+  const [isScraping, setIsScraping] = useState(false);
 
   // --- Filtering Logic ---
   const filteredProperties = useMemo(() => {
@@ -87,11 +92,35 @@ const Dashboard: React.FC<DashboardProps> = ({ properties: initialProperties }) 
   };
 
   const handleAIAnalyze = async (id: string) => {
-    // In a real app, this would update local state or re-fetch
     console.log(`Triggering AI analysis for ${id}`);
     const property = filteredProperties.find(p => p.id === id);
     if(property) {
         await analyzeProperty(property);
+    }
+  };
+
+  const handleScrape = async () => {
+    setIsScraping(true);
+    try {
+        const res = await fetch('/api/v1/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                source_type: 'scraper_trigger',
+                saved_search_id: 'search-001' 
+            })
+        });
+        
+        if (!res.ok) throw new Error("Scrape failed to trigger");
+        
+        // Refresh data without page reload
+        await onRefresh();
+        
+    } catch (err) {
+        console.error("Scraping error:", err);
+        alert("Failed to retrieve live data. Check server logs.");
+    } finally {
+        setIsScraping(false);
     }
   };
 
@@ -165,7 +194,18 @@ const Dashboard: React.FC<DashboardProps> = ({ properties: initialProperties }) 
       {/* Main Toolbar & Filters */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-           <h2 className="text-lg font-bold text-slate-800">Deal Finder</h2>
+           <div className="flex items-center gap-4">
+               <h2 className="text-lg font-bold text-slate-800">Deal Finder</h2>
+               <button 
+                onClick={handleScrape}
+                disabled={isScraping}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 <RefreshCw size={16} className={isScraping ? "animate-spin" : ""} />
+                 {isScraping ? "Scraping Live Data..." : "Refresh Data (Live Scrape)"}
+               </button>
+           </div>
+           
            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
               <button 
                 onClick={() => setViewMode('grid')}

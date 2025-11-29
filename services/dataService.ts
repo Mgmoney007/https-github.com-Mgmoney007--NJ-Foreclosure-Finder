@@ -1,6 +1,6 @@
 
 import { PropertyListing, RawCSVRow, NormalizedStage, RiskBand } from '../types';
-import { v4 as uuidv4 } from 'uuid';
+import { SOURCE_RELIABILITY_SCORES } from '../constants';
 
 /**
  * Normalization Utilities
@@ -9,6 +9,18 @@ const cleanMoney = (str: string): number | null => {
   if (!str || str === 'N/A') return null;
   const cleaned = str.replace(/[$,]/g, '').trim();
   const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
+};
+
+const cleanInt = (str: string): number | null => {
+  if (!str || str === 'N/A') return null;
+  const num = parseInt(str.trim(), 10);
+  return isNaN(num) ? null : num;
+};
+
+const cleanFloat = (str: string): number | null => {
+  if (!str || str === 'N/A') return null;
+  const num = parseFloat(str.trim());
   return isNaN(num) ? null : num;
 };
 
@@ -88,6 +100,18 @@ const determineRiskBand = (equityPct: number | null, stage: NormalizedStage): Ri
   return RiskBand.LOW; // High equity = Low Risk for investor
 };
 
+const generateDeterministicId = (input: string): string => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const hex = Math.abs(hash).toString(16).padStart(8, '0');
+  // Return a UUID-like structure (8-4-4-4-12)
+  return `${hex}-${hex.substring(0,4)}-${hex.substring(0,4)}-${hex.substring(0,4)}-${hex}${hex.substring(0,4)}`;
+};
+
 /**
  * Ingestion Engine
  * Converts Raw CSV rows into Unified Schema
@@ -108,9 +132,13 @@ export const ingestCSVData = (csvContent: string): PropertyListing[] => {
     return matches;
   });
 
+  const sourceType = "Manual Import";
+  const sourceReliability = SOURCE_RELIABILITY_SCORES[sourceType] || SOURCE_RELIABILITY_SCORES["Unknown Source"];
+
   return dataRows.map(row => {
     // Map array to object based on index (assuming fixed structure for demo)
     // 0: Address, 3: Status, 4: Stage, 5: Date, 6: Bid, 7: Value, 8: URL, 9: Occ, 10: Notes
+    // New fields: 11: Beds, 12: Baths, 13: Lot Size Sqft, 14: Property Type
     const raw: Partial<RawCSVRow> = {
       Address: row[0],
       "Phone Number": row[1],
@@ -122,7 +150,11 @@ export const ingestCSVData = (csvContent: string): PropertyListing[] => {
       "Est. Value": row[7],
       "Source URL": row[8],
       Occupancy: row[9],
-      "Notes / Flags": row[10]
+      "Notes / Flags": row[10],
+      "Beds": row[11],
+      "Baths": row[12],
+      "Lot Size Sqft": row[13],
+      "Property Type": row[14],
     };
 
     const address = parseAddress(raw.Address || "");
@@ -137,14 +169,18 @@ export const ingestCSVData = (csvContent: string): PropertyListing[] => {
     if (equity_pct && equity_pct > 30) aiScore += 30;
     if (raw.Occupancy === 'Vacant') aiScore += 10;
     if (stage === NormalizedStage.REO) aiScore -= 10;
+    
+    // Deterministic key
+    const dedupeKey = (address.street + address.city + address.zip).toLowerCase().replace(/\s/g, '');
 
     return {
-      id: uuidv4(),
+      id: generateDeterministicId(dedupeKey), // Deterministic ID ensures Client and Server match for mock data
       address: address,
       source: {
-        source_type: "Manual Import",
+        source_type: sourceType,
         source_name: "Excel Tracker",
-        source_url: raw["Source URL"] || ""
+        source_url: raw["Source URL"] || "",
+        source_reliability: sourceReliability,
       },
       foreclosure: {
         stage: stage,
@@ -170,10 +206,15 @@ export const ingestCSVData = (csvContent: string): PropertyListing[] => {
       audit: {
         ingestion_timestamp: new Date().toISOString(),
         last_updated: new Date().toISOString(),
-        dedupe_key: (address.street + address.city + address.zip).toLowerCase().replace(/\s/g, '')
+        dedupe_key: dedupeKey
       },
       occupancy: raw.Occupancy || "Unknown",
-      notes: raw["Notes / Flags"] || ""
+      notes: raw["Notes / Flags"] || "",
+      // Assessor data
+      beds: cleanInt(raw.Beds || ""),
+      baths: cleanFloat(raw.Baths || ""),
+      lot_size_sqft: cleanInt(raw["Lot Size Sqft"] || ""),
+      property_type: raw["Property Type"] || null,
     };
   });
 };

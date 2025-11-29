@@ -31,6 +31,7 @@ export interface SourceInfo {
   source_type: string;
   source_name: string;
   source_url: string;
+  source_reliability: number | null; // New field for trustworthiness (0-1, 1 being most reliable)
 }
 
 export interface ForeclosureDetails {
@@ -73,16 +74,45 @@ export interface PropertyListing {
   audit: Audit;
   occupancy: string;
   notes: string;
+  // New assessor data fields
+  lot_size_sqft?: number | null;
+  beds?: number | null;
+  baths?: number | null;
+  property_type?: string | null;
 }
 
+// SavedSearch now aligned with NormalizedSearchParams
 export interface SavedSearch {
   id: string;
   name: string;
   filters: {
+    zip?: string;
+    city?: string;
+    county?: string;
+    propertyTypes?: string[];
+    minPrice?: number;
+    maxPrice?: number;
+    stages?: NormalizedStage[];
+
+    // Geographical Search
+    latitude?: number;
+    longitude?: number;
+    radius_miles?: number;
+
+    // Assessor Data Filters
+    min_lot_size_sqft?: number;
+    max_lot_size_sqft?: number;
+    min_beds?: number;
+    max_beds?: number;
+    min_baths?: number;
+    max_baths?: number;
+    property_types?: string[];
+
+
+    // legacy / extra filters still allowed
     min_equity_pct?: number;
     max_price?: number;
     cities?: string[];
-    stages?: NormalizedStage[];
   };
   alerts_enabled: boolean;
   created_at: string;
@@ -105,7 +135,7 @@ export interface RawListing {
   raw_defendant: string | null;
   raw_detail_url: string;
   source_type: string;
-  
+
   // Optional metadata useful for debugging ingestion issues
   debug_metadata?: Record<string, any>;
 }
@@ -133,7 +163,7 @@ export interface NormalizedSearchParams {
 export interface SourceAdapter {
   id: string;
   label: string;
-  
+
   /**
    * Determines if this adapter is capable of fetching data for a specific region.
    * @param state - Two-letter state code (e.g., "NJ")
@@ -161,16 +191,24 @@ export interface RawCSVRow {
   "Source URL": string;
   Occupancy: string;
   "Notes / Flags": string;
+  // New Assessor Data
+  "Beds"?: string;
+  "Baths"?: string;
+  "Lot Size Sqft"?: string;
+  "Property Type"?: string;
 }
 
 // --- Pipeline & Repository Interfaces ---
 
+// Extended to include useful counters
 export interface AdapterIngestionSummary {
   adapterId: string;
   rawCount: number;
   normalizedCount: number;
   createdCount: number;
   updatedCount: number;
+  itemsSkippedNormalization: number;
+  itemsFailedProcessing: number;
   error?: string;
 }
 
@@ -192,10 +230,45 @@ export interface PropertyRepository {
 }
 
 export interface NormalizationService {
-  normalizeRawListing(raw: RawListing): PropertyListing;
+  /**
+   * Convert RawListing into a normalized PropertyListing.
+   * Return null to skip obviously bad/irrelevant records.
+   */
+  normalizeRawListing(raw: RawListing): PropertyListing | null;
+
+  /**
+   * Deterministic dedupe key from address components.
+   */
   computeDedupKey(address: { street: string; city: string; zip: string }): string;
 }
 
 export interface AIService {
+  /**
+   * Enrich an already-normalized PropertyListing with AI fields (ai_analysis),
+   * without breaking audit/address/source invariants.
+   */
   enrichListing(listing: PropertyListing): Promise<PropertyListing>;
+}
+
+// --- Data Events & Timeline History ---
+
+export enum EventType {
+  LIS_PENDENS_FILED = "LIS_PENDENS_FILED",
+  FINAL_JUDGMENT = "FINAL_JUDGMENT",
+  SHERIFF_SALE_SCHEDULED = "SHERIFF_SALE_SCHEDULED",
+  SHERIFF_SALE_ADJOURNED = "SHERIFF_SALE_ADJOURNED",
+  AUCTION_LISTED = "AUCTION_LISTED",
+  PRICE_CHANGE = "PRICE_CHANGE",
+  SOLD_TO_PLAINTIFF = "SOLD_TO_PLAINTIFF",
+  SOLD_TO_THIRD_PARTY = "SOLD_TO_THIRD_PARTY",
+  LISTING_REMOVED = "LISTING_REMOVED",
+}
+
+export interface TimelineEvent {
+  id: string;
+  date: string; // ISO 8601
+  type: EventType;
+  source: string; // "CivilView", "County Records", "User Input"
+  description: string; // Human readable summary
+  metadata: Record<string, any>; // Flexible payload based on type
 }
