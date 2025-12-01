@@ -13,33 +13,42 @@ const SavedSearches: React.FC<SavedSearchesProps> = ({ onLoadSearch }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/v1/saved-searches')
-      .then(res => {
-        if (!res.ok) throw new Error("Failed to load searches");
-        return res.json();
-      })
-      .then(data => {
-        setSearches(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        // Fallback mock data if API fails (for demo resilience)
-        setSearches([
-            {
-                id: "mock-1",
-                name: "Hudson County Flips (Fallback)",
-                filters: {
-                    county: "Hudson",
-                    min_equity_pct: 20,
-                    stages: []
-                },
-                alerts_enabled: true,
-                created_at: new Date().toISOString()
+    const fetchSearches = async () => {
+        try {
+            // Try relative path first
+            let res = await fetch('/api/v1/saved-searches').catch(() => null);
+            
+            // Fallback to explicit localhost
+            if (!res || !res.ok) {
+                res = await fetch('http://localhost:3001/api/v1/saved-searches').catch(() => null);
             }
-        ]);
-        setLoading(false);
-      });
+
+            if (!res || !res.ok) throw new Error("Failed to load searches");
+            
+            const data = await res.json();
+            setSearches(data);
+            setLoading(false);
+        } catch (err) {
+            console.error(err);
+            // Fallback mock data if API fails (for demo resilience)
+            setSearches([
+                {
+                    id: "mock-1",
+                    name: "Hudson County Flips (Fallback)",
+                    filters: {
+                        county: "Hudson",
+                        min_equity_pct: 20,
+                        stages: []
+                    },
+                    alerts_enabled: true,
+                    created_at: new Date().toISOString()
+                }
+            ]);
+            setLoading(false);
+        }
+    };
+
+    fetchSearches();
   }, []);
 
   const handleApply = (search: SavedSearch) => {

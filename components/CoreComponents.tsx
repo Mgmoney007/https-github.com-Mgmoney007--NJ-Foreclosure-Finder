@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { PropertyListing, NormalizedStage, RiskBand, TimelineEvent } from '../types';
 import { 
@@ -223,22 +222,31 @@ export const PropertyDrawer: React.FC<PropertyDrawerProps> = ({ isOpen, onClose,
   useEffect(() => {
     if (isOpen && property) {
         setHistoryLoading(true);
-        // Reset history initially
         setHistory([]);
         
-        fetch(`/api/v1/properties/${property.id}/history`)
-            .then(res => {
-                if (!res.ok) throw new Error("Failed to fetch history");
-                return res.json();
-            })
-            .then(data => {
+        const fetchHistory = async () => {
+            try {
+                // Attempt relative fetch first (Production / Proxy)
+                let res = await fetch(`/api/v1/properties/${property.id}/history`).catch(() => null);
+                
+                // Fallback to explicit localhost if relative fails (Dev mismatch)
+                if (!res || !res.ok) {
+                    res = await fetch(`http://localhost:3001/api/v1/properties/${property.id}/history`).catch(() => null);
+                }
+
+                if (!res || !res.ok) throw new Error("Failed to fetch history");
+
+                const data = await res.json();
                 setHistory(data);
-                setHistoryLoading(false);
-            })
-            .catch(err => {
+            } catch (err) {
                 console.error("History fetch error:", err);
+                // We keep history empty on error
+            } finally {
                 setHistoryLoading(false);
-            });
+            }
+        };
+
+        fetchHistory();
     } else {
         setHistory([]);
     }

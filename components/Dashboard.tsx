@@ -5,7 +5,6 @@ import MapView from './MapView';
 import { SearchForm, DealsTable, PropertyDrawer, SearchFilters } from './CoreComponents';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ArrowUpRight, DollarSign, LayoutGrid, List, Database, Map, RefreshCw } from 'lucide-react';
-import { analyzeProperty } from '../services/geminiService';
 
 interface DashboardProps {
   properties: PropertyListing[];
@@ -93,25 +92,43 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleAIAnalyze = async (id: string) => {
     console.log(`Triggering AI analysis for ${id}`);
-    const property = filteredProperties.find(p => p.id === id);
-    if(property) {
-        await analyzeProperty(property);
+    try {
+        // Attempt to call the backend API which handles the AI service and updates the DB
+        let res = await fetch(`/api/v1/properties/${id}/analyze`, { method: 'POST' }).catch(() => null);
+        
+        // Fallback for dev environments
+        if (!res || !res.ok) {
+             res = await fetch(`http://localhost:3001/api/v1/properties/${id}/analyze`, { method: 'POST' }).catch(() => null);
+        }
+        
+        if (res && res.ok) {
+            // Refresh data to show new analysis from the server
+            await onRefresh();
+        } else {
+            console.error("Analysis API failed");
+        }
+    } catch (e) {
+        console.error("Analysis failed", e);
     }
   };
 
   const handleScrape = async () => {
     setIsScraping(true);
     try {
-        const res = await fetch('/api/v1/ingest', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+        const body = JSON.stringify({ 
                 source_type: 'scraper_trigger',
                 saved_search_id: 'search-001' 
-            })
-        });
+            });
+        const headers = { 'Content-Type': 'application/json' };
+
+        // Attempt scrape trigger with fallback
+        let res = await fetch('/api/v1/ingest', { method: 'POST', headers, body }).catch(() => null);
         
-        if (!res.ok) throw new Error("Scrape failed to trigger");
+        if (!res || !res.ok) {
+             res = await fetch('http://localhost:3001/api/v1/ingest', { method: 'POST', headers, body }).catch(() => null);
+        }
+        
+        if (!res || !res.ok) throw new Error("Scrape failed to trigger");
         
         // Refresh data without page reload
         await onRefresh();

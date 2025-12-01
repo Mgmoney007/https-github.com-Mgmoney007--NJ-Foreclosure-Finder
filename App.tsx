@@ -5,7 +5,7 @@ import { ingestCSVData } from './services/dataService';
 import Dashboard from './components/Dashboard';
 import SavedSearches from './components/SavedSearches';
 import { SearchFilters } from './components/CoreComponents';
-import { Building2, Search, Bell, Menu } from 'lucide-react';
+import { Building2, Search, Bell, Menu, WifiOff } from 'lucide-react';
 
 type ViewMode = 'grid' | 'list' | 'map';
 type Page = 'dashboard' | 'saved_searches';
@@ -13,6 +13,7 @@ type Page = 'dashboard' | 'saved_searches';
 const App: React.FC = () => {
   const [properties, setProperties] = useState<PropertyListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   
   // Navigation State
   const [activePage, setActivePage] = useState<Page>('dashboard');
@@ -29,10 +30,18 @@ const App: React.FC = () => {
   const fetchProperties = useCallback(async () => {
     setLoading(true);
     try {
-        const res = await fetch('/api/v1/properties?limit=100');
-        if (res.ok) {
+        // Try relative path first (Production / Proxy)
+        let res = await fetch('/api/v1/properties?limit=100').catch(() => null);
+        
+        // If relative failed or 404 (Dev server mismatch), try explicit localhost
+        if (!res || !res.ok) {
+           res = await fetch('http://localhost:3001/api/v1/properties?limit=100').catch(() => null);
+        }
+
+        if (res && res.ok) {
             const json = await res.json();
             setProperties(json.data);
+            setIsDemoMode(false);
         } else {
             throw new Error("API not available");
         }
@@ -40,6 +49,7 @@ const App: React.FC = () => {
         console.warn("API fetch failed, falling back to local ingestion (Mock Data):", err);
         const data = ingestCSVData(MOCK_CSV_DATA);
         setProperties(data);
+        setIsDemoMode(true);
     } finally {
         setLoading(false);
     }
@@ -82,6 +92,11 @@ const App: React.FC = () => {
                     <Building2 size={24} className="text-white" />
                 </div>
                 <span className="font-bold text-xl tracking-tight">{APP_NAME}</span>
+                {isDemoMode && (
+                    <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-900 uppercase tracking-wide flex items-center gap-1">
+                        <WifiOff size={10} /> Demo Mode
+                    </span>
+                )}
             </div>
             
             <div className="hidden md:block">

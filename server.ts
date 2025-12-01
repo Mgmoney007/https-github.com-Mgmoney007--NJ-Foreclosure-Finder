@@ -24,6 +24,11 @@ import { SalesWebAdapter } from './services/adapters/salesWebAdapter';
 import { NormalizationService } from './services/normalizationService';
 import { GeminiAIService } from './services/GeminiAIService';
 
+// Fix for missing Node.js types if @types/node is not available
+declare var __dirname: string;
+declare var require: any;
+declare var module: any;
+
 // --- Configuration ---
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,7 +46,7 @@ const upload = multer({
 
 // --- Custom Request Interfaces for improved type safety ---
 interface MulterRequest extends ExpressRequest {
-  file?: Express.Multer.File;
+  file?: any;
   body: {
     source_type: string;
     adapter_id?: string;
